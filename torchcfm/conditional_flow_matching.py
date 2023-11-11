@@ -410,7 +410,7 @@ class SchrodingerBridgeConditionalFlowMatcher(ConditionalFlowMatcher):
         ----------
         [1] Improving and Generalizing Flow-Based Generative Models with minibatch optimal transport, Preprint, Tong et al.
         """
-        return self.sigma * torch.sqrt(t * (1 - t))
+        return self.sigma * torch.sqrt(t * (1 - t)) 
 
     def compute_conditional_flow(self, x0, x1, t, xt):
         """Compute the conditional vector field.
@@ -573,3 +573,123 @@ class VariancePreservingConditionalFlowMatcher(ConditionalFlowMatcher):
         """
         del xt
         return math.pi / 2 * (torch.cos(math.pi / 2 * t) * x1 - torch.sin(math.pi / 2 * t) * x0)
+
+'''
+Conditional Flow Matching for Hamiltonian Flows
+
+Consider a  Hamiltoninan flow H(rho,phi) = ||\nabla phi||^2/2 + V(rho) where rho is the density and phi is the potential.
+
+In general V(rho) is composed of a linear term \int V(x)\rho(x)dx, a nonlinear term \int G(\rho(x))dx and an interaction term 
+\int \int W(x,y)\rho(x)\rho(y)dxdy.
+
+Given a minibatch of the initial and terminal densities, we solve the following problem:
+1) Build a matching problem with cost of transportation given by the integral of the path Lagrangians.
+2) Solve the matching problem. 
+3) Solve the Hamiltonian flow for Gaussian distributions. 
+4) Build the appropiate mu_t, sigma_t and conditional flow functions.
+5) Sample the minibatch of locations and conditional flows.
+6) Train the velocity field.
+'''
+
+class HarmonicOscillatorConditionalFlowMatcher(ConditionalFlowMatcher):
+    '''
+    Child class for Hamiltonian flow matching method. This class implements 
+    the HFM methods from _ and inherits the ConditionalFlowMatcher parent class.
+    The potential term is given by V(\rho) = 1/2\int x^TUx\rho(x)dx with U a SPD matrix.
+
+    It overrides the compute_mu_t, compute_sigma_t and compute_conditional_flow functions.
+    '''
+
+    def __init__(self,U: torch.tensor,sigma: float = 0.5,ot_method = "exact"):
+        '''
+        Initialize the HarmonicOscillatorConditionalFlowMatcher class. It requires the hyper-parameter U, Q, D and the matching scheme.
+        Q and D are the eigvalue decomposition, U = QDQ^T. 
+        Parameters
+        ----------
+        U : Tensor, shape (dim,dim)
+            represents the SPD matrix, use an upper triangular matrix.
+        ot_sampler: Method to draw couplings (x0, x1) 
+        '''
+        self.U = U
+        self.sqt_tr_U = torch.sqrt(torch.trace(U))
+        self.D,self.Q = torch.linalg.eigh(U, UPLO='U')
+        self.sigma = sigma
+        if ot_method == "exact":
+            self.ot_sampler = OTPlanSampler(method=ot_method)
+        elif ot_method == "lagrangian":
+            # TODO: implement lagrangian OT
+            raise NotImplementedError("Lagrangian OT not implemented yet.")
+        else:
+            self.ot_sampler = OTPlanSampler(method=ot_method, reg=2 * self.sigma**2)
+
+    def compute_mu_t(self, x0, x1, t):
+        '''
+        Compute the mean of the probability path (Eq.5) from [3].
+
+        Parameters
+        ----------
+        x0 : Tensor, shape (bs, *dim)
+            represents the source minibatch
+        x1 : Tensor, shape (bs, *dim)
+            represents the target minibatch
+        t : FloatTensor, shape (bs)
+
+        Returns
+        -------
+        mean mu_t: Q(cos(D^1/2 t)Q^Tx0 + sin(D^1/2 t)sin(D^-1/2)(-cos(D^1/2)Q^Tx0+Q^Tx1))
+        
+        '''
+        D_t = self.D**0.5 * t
+        cos_D_t = torch.diag(torch.cos(D_t))
+        sin_D_t = torch.diag(torch.sin(D_t))
+        cos_D_1 = torch.diag(torch.cos(self.D))
+        inv_sin_D_1 = torch.diag(torch.sin(self.D)**-1)
+        mu_t = self.Q@(cos_D_t@self.Q.T@x0 + sin_D_t@inv_sin_D_1@(-cos_D_1@self.Q.T@x0+self.Q.T@x1))
+        return mu_t
+    
+    def compute_sigma_t(self ,t):
+        '''
+        Compute the standard deviation of the probability path N(mu(t),sigma(t)).
+
+        Parameters
+        ----------
+        t : FloatTensor, shape (bs)
+
+        Returns
+        -------
+        standard deviation sigma_t = sigma(cos(tr_U^1/2 t) + sin(tr_U^1/2 t)(1-cos(tr_U^1/2))/(sin(tr_U^1/2))
+
+        '''
+
+        sig_t = self.sigma*(torch.cos(self.sqt_tr_U*t) + torch.sin(self.sqt_tr_U*t)*(1-torch.cos(self.sqt_tr_U))/(torch.sin(self.sqt_tr_U)+1e-8))
+
+        return sig_t
+    
+    def compute_conditional_flow(self, x0, x1, t, xt):
+        '''
+        Compute the conditional vector field ut(x1|x0) = sigma_t'(x-mu_t')/sigma_t +mu_t'
+
+        Parameters
+        ----------
+        x0 : Tensor, shape (bs, *dim)
+            represents the source minibatch
+        x1 : Tensor, shape (bs, *dim)
+            represents the target minibatch
+        t : FloatTensor, shape (bs)
+        xt : Tensor, shape (bs, *dim)
+            represents the samples drawn from probability path pt
+
+        Returns
+        -------
+        ut : conditional vector field ut(x1|x0) = sigma_t'(x-mu_t')/sigma_t +mu_t'
+
+        '''
+        t = pad_t_like_x(t, x0)
+        mu_t = self.compute_mu_t(x0, x1, t)
+        sigma_t = self.compute_sigma_t(t)
+        # continue here
+        
+        return x1 - x0  
+    
+
+        

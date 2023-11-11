@@ -65,6 +65,21 @@ def plot_trajectories(traj):
     plt.yticks([])
     plt.show()
 
+def compare_trajectories(traj1, traj2):
+    '''Plot trajectories of some selected samples.'''
+    n = 2000
+    plt.figure(figsize=(6, 6))
+    plt.scatter(traj1[0, :n, 0], traj1[0, :n, 1], s=10, alpha=0.8, c='black')
+    plt.scatter(traj1[:, :n, 0], traj1[:, :n, 1], s=0.2, alpha=0.2, c='olive')
+    plt.scatter(traj1[-1, :n, 0], traj1[-1, :n, 1], s=4, alpha=1, c='blue')
+    # plt.scatter(traj2[0, :n, 0], traj2[0, :n, 1], s=10, alpha=0.8, c='black')
+    plt.scatter(traj2[:, :n, 0], traj2[:, :n, 1], s=0.2, alpha=0.2, c='olive')
+    plt.scatter(traj2[-1, :n, 0], traj2[-1, :n, 1], s=4, alpha=1, c='red')
+    plt.legend(['Prior sample z(S)', 'Flow', 'z(0)'])
+    plt.xticks([])
+    plt.yticks([])
+    plt.show()
+
 
 class SDE(torch.nn.Module):
     noise_type = "diagonal"
