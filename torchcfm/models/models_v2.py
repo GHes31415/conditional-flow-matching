@@ -41,11 +41,14 @@ class MLP(torch.nn.Module):
             out_dim = dim
         self.net = torch.nn.Sequential(
             torch.nn.Linear(dim + (1 if time_varying else 0), w),
-            torch.nn.SELU(),
+            #torch.nn.SELU(),
+            torch.nn.Tanh(),
             torch.nn.Linear(w, w),
-            torch.nn.SELU(),
+            #torch.nn.SELU(),
+            torch.nn.Tanh(),
             torch.nn.Linear(w, w),
-            torch.nn.SELU(),
+            #torch.nn.SELU(),
+            torch.nn.Tanh(),
             torch.nn.Linear(w, out_dim),
         )
 

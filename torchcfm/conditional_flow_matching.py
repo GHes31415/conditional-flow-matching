@@ -624,7 +624,7 @@ class HarmonicOscillatorConditionalFlowMatcher(ConditionalFlowMatcher):
         else:
             self.ot_sampler = OTPlanSampler(method=ot_method, reg=2 * self.sigma**2)
 
-    def compute_mu_t(self, x0, x1, t):
+    def compute_mu_t(self, x0, x1, t,derivative = False):
         '''
         Compute the mean of the probability path (Eq.5) from [3].
 
@@ -641,15 +641,21 @@ class HarmonicOscillatorConditionalFlowMatcher(ConditionalFlowMatcher):
         mean mu_t: Q(cos(D^1/2 t)Q^Tx0 + sin(D^1/2 t)sin(D^-1/2)(-cos(D^1/2)Q^Tx0+Q^Tx1))
         
         '''
-        D_t = self.D**0.5 * t
-        cos_D_t = torch.diag(torch.cos(D_t))
-        sin_D_t = torch.diag(torch.sin(D_t))
-        cos_D_1 = torch.diag(torch.cos(self.D))
-        inv_sin_D_1 = torch.diag(torch.sin(self.D)**-1)
+        D_t = self.D**0.5 * t[:,None]
+        cos_D_t = torch.diag_embed(torch.cos(D_t))
+        sin_D_t = torch.diag_embed(torch.sin(D_t))
+        cos_D_1 = torch.diag(torch.cos(self.D**.5))
+        inv_sin_D_1 = torch.diag(torch.sin(self.D**.5)**-1)
+        # print(cos_D_t.shape,self.Q.T.shape,x0)
+        # print(sin_D_t@inv_sin_D_1@(-cos_D_1@self.Q.T@x0+self.Q.T@x1))
         mu_t = self.Q@(cos_D_t@self.Q.T@x0 + sin_D_t@inv_sin_D_1@(-cos_D_1@self.Q.T@x0+self.Q.T@x1))
-        return mu_t
+        if not derivative :
+            return mu_t
+        else:
+            mu_t_prime = self.Q@torch.diag_embed(self.D**5)@(-sin_D_t@self.Q.T@x0 + cos_D_t@inv_sin_D_1@(-cos_D_1@self.Q.T@x0+self.Q.T@x1))
+            return mu_t,mu_t_prime
     
-    def compute_sigma_t(self ,t):
+    def compute_sigma_t(self ,t,derivative = False):
         '''
         Compute the standard deviation of the probability path N(mu(t),sigma(t)).
 
@@ -665,7 +671,12 @@ class HarmonicOscillatorConditionalFlowMatcher(ConditionalFlowMatcher):
 
         sig_t = self.sigma*(torch.cos(self.sqt_tr_U*t) + torch.sin(self.sqt_tr_U*t)*(1-torch.cos(self.sqt_tr_U))/(torch.sin(self.sqt_tr_U)+1e-8))
 
-        return sig_t
+        if not derivative:
+            return sig_t
+        else:
+            sig_t_prime = self.sigma*self.sqt_tr_U*(-torch.sin(self.sqt_tr_U*t) + torch.cos(self.sqt_tr_U*t)*(1-torch.cos(self.sqt_tr_U))/(torch.sin(self.sqt_tr_U)+1e-8))
+            return sig_t,sig_t_prime
+
     
     def compute_conditional_flow(self, x0, x1, t, xt):
         '''
@@ -683,15 +694,15 @@ class HarmonicOscillatorConditionalFlowMatcher(ConditionalFlowMatcher):
 
         Returns
         -------
-        ut : conditional vector field ut(x1|x0) = sigma_t'(x-mu_t')/sigma_t +mu_t'
+        ut : conditional vector field ut(x1|x0) = sigma_t'(x-mu_t)/sigma_t +mu_t_prime
 
         '''
         t = pad_t_like_x(t, x0)
-        mu_t = self.compute_mu_t(x0, x1, t)
-        sigma_t = self.compute_sigma_t(t)
-        # continue here
-        
-        return x1 - x0  
+        mu_t,mu_t_prime = self.compute_mu_t(x0, x1, t,derivative=True)
+        sigma_t,sigma_t_prime = self.compute_sigma_t(t,derivative=True)
+        u_t = sigma_t_prime*(xt-mu_t)/(sigma_t+1e-8) + mu_t_prime
+                
+        return u_t
     
 
         

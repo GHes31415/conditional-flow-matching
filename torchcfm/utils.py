@@ -39,7 +39,7 @@ def sample_moons(n):
 
 
 def sample_8gaussians(n):
-    return eight_normal_sample(n, 2, scale=5, var=0.1).float()
+    return eight_normal_sample(n, 2, scale=8, var=0.1).float()
 
 
 class torch_wrapper(torch.nn.Module):
