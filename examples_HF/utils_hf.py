@@ -4,15 +4,15 @@ import torch as torch
 import os
 import imageio
 
-def gif_quiver(model,save_dir,xx0,num_samples,N = 50):
+def gif_quiver(model,save_dir,xx0,num_samples,x0 = -10, x1 = 10, y0= -10, y1=10,N = 50):
 
     # Generate a grid of points
 
     nx = 25
-    x = np.linspace(-10, 10, nx)
-    y = np.linspace(-10, 10, nx)
+    x = np.linspace(x0,x1, nx)
+    y = np.linspace(y0,y1, nx)
     X, Y = np.meshgrid(x, y)
-    N = 50
+    
 
     xx = xx0.clone()
     tt = torch.ones((num_samples,1))/N*0
@@ -52,9 +52,9 @@ def gif_quiver(model,save_dir,xx0,num_samples,N = 50):
         plt.quiver(X, Y, U, V, magnitude, cmap='viridis')
         plt.colorbar(label='Magnitude')
         # plt.show()
-        plt.savefig(os.path.join(save_dir,f"quiver_MLP_25_000_{i}.png"))
+        plt.savefig(os.path.join(save_dir,f"figs_gif/quiver_MLP_25_000_{i}.png"))
         plt.close()
-    images = [imageio.imread(os.path.join(save_dir,f"quiver_MLP_25_000_{i}.png")) for i in range(N)]
+    images = [imageio.imread(os.path.join(save_dir,f"figs_gif/quiver_MLP_25_000_{i}.png")) for i in range(N)]
     imageio.mimsave(os.path.join(save_dir,f"quiver_MLP_25_000.gif"), images,duration = 5)
 
 def particle_gif(model,savedir,xx,gg,N = 50):
@@ -79,4 +79,4 @@ def particle_gif(model,savedir,xx,gg,N = 50):
         plt.close()
         # plt.show()
     images = [imageio.imread(os.path.join(savedir,f"figs_gif/parts_MLP_15_000_{i}.png")) for i in range(N)]
-    imageio.mimsave(os.path.join(savedir,f"figs_gif/point_evol_MLP_15_000.gif"), images, duration = 5)
+    imageio.mimsave(os.path.join(savedir,f"point_evol_MLP_15_000.gif"), images, duration = 5)
